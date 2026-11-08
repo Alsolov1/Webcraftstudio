@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>WEBCRAFT | Admin Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090c11;color:#e5eaf1;font-family:Inter,Arial,sans-serif}header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 5%;border-bottom:1px solid #252e39;background:#10151d}.brand{letter-spacing:.2em;font-weight:800}button{border:1px solid #596779;border-radius:9px;background:#1a222d;color:#e5eaf1;padding:10px 16px;cursor:pointer}main{width:min(1100px,90%);margin:55px auto}h1{font-size:clamp(28px,4vw,42px);margin:0 0 8px}.muted{color:#9ba7b6}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:32px}.card{padding:24px;border:1px solid #293441;border-radius:16px;background:linear-gradient(145deg,#151c26,#0f141b)}.card h2{font-size:17px;margin:0 0 10px}.card p{color:#9ba7b6;line-height:1.6;font-size:14px;margin:0}.status{display:inline-block;margin-top:26px;padding:8px 12px;border:1px solid #345849;border-radius:99px;color:#8fe0b7;font-size:12px}#error{color:#ff8b8b;margin-top:20px}
+
+.requests{margin-top:30px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0}.requests table{width:100%;border-collapse:collapse;min-width:760px}.table-wrap{overflow:auto;border:1px solid #293441;border-radius:14px}.requests th,.requests td{padding:13px 12px;text-align:left;border-bottom:1px solid #293441;font-size:13px;vertical-align:top}.requests th{color:#aebdce;background:#121923}.requests td{color:#dce3ed}.requests select{background:#0b1017;color:#e5eaf1;border:1px solid #455366;border-radius:7px;padding:7px}.requests button{white-space:nowrap}.empty{padding:25px;color:#9ba7b6;text-align:center}.count{font-size:26px;font-weight:800;margin-top:8px}.request-message{max-width:280px;white-space:pre-wrap;overflow-wrap:anywhere;color:#aeb8c7}.small{font-size:12px;color:#9ba7b6}
+@media(max-width:650px){main{margin:30px auto}.card{padding:18px}}
+</style>
+</head>
+<body>
+<header><div class="brand">WEBCRAFT <span class="muted">/ ADMIN</span></div><button id="logout">Sign out</button></header>
+<main>
+  <h1>Admin dashboard</h1>
+  <p class="muted">You are signed in with an authorized administrator account.</p>
+  <div class="status">● Administrator access verified</div>
+  <section class="grid">
+    <article class="card"><h2>Customer requests</h2><p>Requests submitted through the website contact form.</p><div class="count" id="requestCount">—</div><div class="small">Total requests</div></article>
+    <article class="card"><h2>New requests</h2><p>Requests waiting for your first response.</p><div class="count" id="newCount">—</div><div class="small">Status: New</div></article>
+    <article class="card"><h2>Projects & services</h2><p>Project and service management can be added after the requests workflow is verified.</p></article>
+  </section>
+  <section class="requests">
+    <h2>Customer requests</h2>
+    <p class="muted">Review submissions and update their status. New requests are stored in Supabase.</p>
+    <div class="toolbar"><span class="small" id="requestFeedback" role="status">Loading requests…</span><button id="refreshRequests" type="button">Refresh</button></div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Customer</th><th>Contact</th><th>Service / Budget</th><th>Message</th><th>Status</th></tr></thead><tbody id="requestsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody></table></div>
+  </section>
+  <p id="error" role="alert"></p>
+</main>
+<script>
+const SUPABASE_URL = "https://dtuocmximdmzwjehzbkn.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_5_KPLTZQR4YelUYBbYzuvw_CwMpz1uS";
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+let currentAdmin = null;
+const feedback = document.getElementById('requestFeedback');
+const tbody = document.getElementById('requestsBody');
+const safe = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+async function loadRequests() {
+  feedback.textContent = 'Loading requests…';
+  const { data, error } = await client.from('customer_requests')
+    .select('id,name,email,phone,service,budget,message,status,created_at')
+    .order('created_at', { ascending: false }).limit(200);
+  if (error) {
+    feedback.textContent = 'Could not load requests. Check that customer-requests-setup.sql has been run.';
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">${safe(error.message)}</td></tr>`;
+    return;
+  }
+  const rows = data || [];
+  document.getElementById('requestCount').textContent = rows.length;
+  document.getElementById('newCount').textContent = rows.filter(r => r.status === 'new').length;
+  feedback.textContent = `${rows.length} latest requests shown (maximum 200).`;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No customer requests yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${safe(new Date(r.created_at).toLocaleString())}</td>
+    <td><strong>${safe(r.name)}</strong></td>
+    <td>${safe(r.email)}<br>${safe(r.phone)}</td>
+    <td>${safe(r.service)}<br><span class="small">${safe(r.budget)}</span></td>
+    <td><div class="request-message">${safe(r.message)}</div></td>
+    <td><select data-request-id="${Number(r.id)}" aria-label="Request status">
+      <option value="new" ${r.status==='new'?'selected':''}>New</option>
+      <option value="contacted" ${r.status==='contacted'?'selected':''}>Contacted</option>
+      <option value="in_progress" ${r.status==='in_progress'?'selected':''}>In progress</option>
+      <option value="closed" ${r.status==='closed'?'selected':''}>Closed</option>
+    </select></td>
+  </tr>`).join('');
+}
+
+(async () => {
+  const { data, error } = await client.auth.getSession();
+  if (error || !data.session) { location.replace('./'); return; }
+  const { data: admin, error: roleError } = await client.from('admin_users')
+    .select('user_id').eq('user_id', data.session.user.id).maybeSingle();
+  if (roleError || !admin) {
+    await client.auth.signOut();
+    location.replace('./');
+    return;
+  }
+  currentAdmin = data.session.user;
+  await loadRequests();
+})();
+
+document.getElementById('refreshRequests').addEventListener('click', loadRequests);
+tbody.addEventListener('change', async event => {
+  const select = event.target.closest('select[data-request-id]');
+  if (!select) return;
+  select.disabled = true;
+  const { error } = await client.from('customer_requests')
+    .update({ status: select.value }).eq('id', Number(select.dataset.requestId));
+  select.disabled = false;
+  if (error) feedback.textContent = `Could not update status: ${error.message}`;
+  else { feedback.textContent = 'Request status updated.'; await loadRequests(); }
+});
+
+document.getElementById('logout').addEventListener('click', async () => {
+  await client.auth.signOut();
+  location.replace('./');
+});
+</script>
+</body>
+</html>
