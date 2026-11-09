@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>WEBCRAFT | Admin Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090c11;color:#e5eaf1;font-family:Inter,Arial,sans-serif}header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 5%;border-bottom:1px solid #252e39;background:#10151d}.brand{letter-spacing:.2em;font-weight:800}button{border:1px solid #596779;border-radius:9px;background:#1a222d;color:#e5eaf1;padding:10px 16px;cursor:pointer}main{width:min(1100px,90%);margin:55px auto}h1{font-size:clamp(28px,4vw,42px);margin:0 0 8px}.muted{color:#9ba7b6}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:28px}.card{padding:24px;border:1px solid #293441;border-radius:16px;background:linear-gradient(145deg,#151c26,#0f141b)}.card h2{font-size:17px;margin:0 0 10px}.card p{color:#9ba7b6;line-height:1.6;font-size:14px;margin:0}.status{display:inline-block;margin-top:26px;padding:8px 12px;border:1px solid #345849;border-radius:99px;color:#8fe0b7;font-size:12px}#error{color:#ff8b8b;margin-top:20px}
+
+.requests{margin-top:30px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0}.requests table{width:100%;border-collapse:collapse;min-width:760px}.table-wrap{overflow:auto;border:1px solid #293441;border-radius:14px}.requests th,.requests td{padding:13px 12px;text-align:left;border-bottom:1px solid #293441;font-size:13px;vertical-align:top}.requests th{color:#aebdce;background:#121923}.requests td{color:#dce3ed}.requests select{background:#0b1017;color:#e5eaf1;border:1px solid #455366;border-radius:7px;padding:7px}.requests button{white-space:nowrap}.empty{padding:25px;color:#9ba7b6;text-align:center}.count{font-size:30px;font-weight:800;margin-top:8px}.metric-card{position:relative;overflow:hidden}.metric-card:after{content:"";position:absolute;right:-24px;top:-30px;width:90px;height:90px;border:1px solid #34475d;border-radius:50%;opacity:.45}.metric-label{font-size:12px;color:#9ba7b6;margin-top:5px}.filterbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.filterbar input,.filterbar select{background:#0b1017;color:#e5eaf1;border:1px solid #455366;border-radius:8px;padding:11px 12px;min-width:190px}.filterbar input{flex:1}.request-message{max-width:280px;white-space:pre-wrap;overflow-wrap:anywhere;color:#aeb8c7}.small{font-size:12px;color:#9ba7b6}
+@media(max-width:650px){main{margin:30px auto}.card{padding:18px}}
+</style>
+</head>
+<body>
+<header><div class="brand">WEBCRAFT <span class="muted">/ ADMIN</span></div><button id="logout">Sign out</button></header>
+<main>
+  <h1>Admin dashboard</h1>
+  <p class="muted">You are signed in with an authorized administrator account.</p>
+  <div class="status">● Administrator access verified</div>
+  <section class="grid" aria-label="Request statistics">
+    <article class="card metric-card"><h2>Total requests</h2><div class="count" id="requestCount">—</div><div class="metric-label">Latest 200 records</div></article>
+    <article class="card metric-card"><h2>New</h2><div class="count" id="newCount">—</div><div class="metric-label">Awaiting first response</div></article>
+    <article class="card metric-card"><h2>Contacted</h2><div class="count" id="contactedCount">—</div><div class="metric-label">First contact made</div></article>
+    <article class="card metric-card"><h2>In progress</h2><div class="count" id="progressCount">—</div><div class="metric-label">Currently being handled</div></article>
+    <article class="card metric-card"><h2>Closed</h2><div class="count" id="closedCount">—</div><div class="metric-label">Completed enquiries</div></article>
+  </section>
+  <section id="notificationPanel" class="card" style="margin-top:24px;border-color:#3b526d">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div><h2 style="margin:0 0 6px">Notifications</h2><p class="muted" style="margin:0">Live checks for newly submitted customer requests.</p></div>
+      <span id="unreadBadge" class="status" style="margin:0">0 unread</span>
+    </div>
+    <p id="notificationMessage" class="muted" role="status" style="margin:14px 0 0">Notifications are active while this dashboard is open.</p>
+  </section>
+  <section class="requests">
+    <h2>Customer requests</h2>
+    <p class="muted">Review submissions and update their status. New requests are stored in Supabase.</p>
+    <div class="toolbar"><span class="small" id="requestFeedback" role="status">Loading requests…</span><button id="refreshRequests" type="button">Refresh</button></div>
+    <div class="filterbar">
+      <input id="requestSearch" type="search" placeholder="Search name, email, phone or message…" aria-label="Search customer requests">
+      <select id="statusFilter" aria-label="Filter by status"><option value="all">All statuses</option><option value="new">New</option><option value="contacted">Contacted</option><option value="in_progress">In progress</option><option value="closed">Closed</option></select>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Customer</th><th>Contact</th><th>Service / Budget</th><th>Message</th><th>Status</th></tr></thead><tbody id="requestsBody"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody></table></div>
+  </section>
+  <p id="error" role="alert"></p>
+</main>
+<script>
+const SUPABASE_URL = "https://dtuocmximdmzwjehzbkn.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_5_KPLTZQR4YelUYBbYzuvw_CwMpz1uS";
+const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+let currentAdmin = null;
+let knownRequestIds = null;
+let allRequests = [];
+let unreadRequestIds = JSON.parse(localStorage.getItem('webcraftUnreadRequestIds') || '[]');
+const notificationMessage = document.getElementById('notificationMessage');
+function renderUnread(){
+  document.getElementById('unreadBadge').textContent = `${unreadRequestIds.length} unread`;
+}
+renderUnread();
+const feedback = document.getElementById('requestFeedback');
+const tbody = document.getElementById('requestsBody');
+const safe = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+
+async function loadRequests() {
+  feedback.textContent = 'Loading requests…';
+  const { data, error } = await client.from('customer_requests')
+    .select('id,name,email,phone,service,budget,message,status,created_at')
+    .order('created_at', { ascending: false }).limit(200);
+  if (error) {
+    feedback.textContent = 'Could not load requests. Check that customer-requests-setup.sql has been run.';
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">${safe(error.message)}</td></tr>`;
+    return;
+  }
+  const rows = data || [];
+  allRequests = rows;
+  updateMetrics(rows);
+  renderRequestRows();
+  const currentIds = new Set(rows.map(r => String(r.id)));
+  if (knownRequestIds !== null) {
+    const newlyArrived = rows.filter(r => !knownRequestIds.has(String(r.id)) && r.status === 'new');
+    if (newlyArrived.length) {
+      const ids = newlyArrived.map(r => String(r.id));
+      unreadRequestIds = [...new Set([...ids, ...unreadRequestIds])];
+      localStorage.setItem('webcraftUnreadRequestIds', JSON.stringify(unreadRequestIds));
+      notificationMessage.textContent = `New request received from ${newlyArrived.map(r => r.name).join(', ')}.`;
+      document.title = `(${unreadRequestIds.length}) New request · WEBCRAFT Admin`;
+      renderUnread();
+      try { if ('Notification' in window && Notification.permission === 'granted') new Notification('WEBCRAFT: New customer request', { body: newlyArrived.map(r => r.name).join(', ') }); } catch(e) {}
+    }
+  } else {
+    notificationMessage.textContent = 'Monitoring is active. This page checks for new requests every 15 seconds.';
+  }
+  knownRequestIds = currentIds;
+  feedback.textContent = `${rows.length} latest requests loaded (maximum 200).`;
+}
+
+function updateMetrics(rows) {
+  document.getElementById('requestCount').textContent = rows.length;
+  document.getElementById('newCount').textContent = rows.filter(r => r.status === 'new').length;
+  document.getElementById('contactedCount').textContent = rows.filter(r => r.status === 'contacted').length;
+  document.getElementById('progressCount').textContent = rows.filter(r => r.status === 'in_progress').length;
+  document.getElementById('closedCount').textContent = rows.filter(r => r.status === 'closed').length;
+}
+
+function renderRequestRows() {
+  const query = document.getElementById('requestSearch').value.trim().toLowerCase();
+  const status = document.getElementById('statusFilter').value;
+  const rows = allRequests.filter(r => {
+    const matchesStatus = status === 'all' || r.status === status;
+    const haystack = [r.name,r.email,r.phone,r.service,r.budget,r.message].join(' ').toLowerCase();
+    return matchesStatus && (!query || haystack.includes(query));
+  });
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">${allRequests.length ? 'No requests match your search or filter.' : 'No customer requests yet.'}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(r => `<tr>
+    <td>${safe(new Date(r.created_at).toLocaleString())}</td>
+    <td><strong>${safe(r.name)}</strong></td>
+    <td>${safe(r.email)}<br>${safe(r.phone)}</td>
+    <td>${safe(r.service)}<br><span class="small">${safe(r.budget)}</span></td>
+    <td><div class="request-message">${safe(r.message)}</div></td>
+    <td><select data-request-id="${Number(r.id)}" aria-label="Request status">
+      <option value="new" ${r.status==='new'?'selected':''}>New</option>
+      <option value="contacted" ${r.status==='contacted'?'selected':''}>Contacted</option>
+      <option value="in_progress" ${r.status==='in_progress'?'selected':''}>In progress</option>
+      <option value="closed" ${r.status==='closed'?'selected':''}>Closed</option>
+    </select></td>
+  </tr>`).join('');
+}
+
+(async () => {
+  const { data, error } = await client.auth.getSession();
+  if (error || !data.session) { location.replace('./'); return; }
+  const { data: admin, error: roleError } = await client.from('admin_users')
+    .select('user_id').eq('user_id', data.session.user.id).maybeSingle();
+  if (roleError || !admin) {
+    await client.auth.signOut();
+    location.replace('./');
+    return;
+  }
+  currentAdmin = data.session.user;
+  await loadRequests();
+})();
+
+document.getElementById('refreshRequests').addEventListener('click', loadRequests);
+document.getElementById('requestSearch').addEventListener('input', renderRequestRows);
+document.getElementById('statusFilter').addEventListener('change', renderRequestRows);
+setInterval(loadRequests, 15000);
+document.getElementById('notificationPanel').addEventListener('click', () => {
+  unreadRequestIds = [];
+  localStorage.setItem('webcraftUnreadRequestIds', '[]');
+  renderUnread();
+  notificationMessage.textContent = 'Notifications marked as read.';
+  document.title = 'WEBCRAFT | Admin Dashboard';
+});
+if ('Notification' in window && Notification.permission === 'default') {
+  // Browser permission is requested only after an explicit click on the panel.
+  document.getElementById('notificationPanel').addEventListener('dblclick', () => Notification.requestPermission());
+}
+tbody.addEventListener('change', async event => {
+  const select = event.target.closest('select[data-request-id]');
+  if (!select) return;
+  select.disabled = true;
+  const { error } = await client.from('customer_requests')
+    .update({ status: select.value }).eq('id', Number(select.dataset.requestId));
+  select.disabled = false;
+  if (error) feedback.textContent = `Could not update status: ${error.message}`;
+  else { feedback.textContent = 'Request status updated.'; await loadRequests(); }
+});
+
+document.getElementById('logout').addEventListener('click', async () => {
+  await client.auth.signOut();
+  location.replace('./');
+});
+</script>
+</body>
+</html>

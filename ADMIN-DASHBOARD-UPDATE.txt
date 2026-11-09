@@ -1,0 +1,18 @@
+WEBCRAFT ADMIN DASHBOARD UPDATE
+
+This package is based on WEBCRAFT_NOTIFICATIONS_V1 and preserves the existing Supabase request form, admin login, notification panel, Resend Edge Function, and webhook setup.
+
+Dashboard improvements:
+- Separate counts for Total, New, Contacted, In progress, and Closed requests (based on the latest 200 records loaded).
+- Search customer requests by name, email, phone, service, budget, or message.
+- Filter the request list by status.
+- Existing request status updates and live notification polling remain in place.
+
+To publish:
+1. Back up your current GitHub repository files.
+2. Extract this ZIP.
+3. Upload/replace the project files at the repository root, keeping the same folder structure.
+4. Commit and push to GitHub.
+5. Open https://webcraftdz.online/admin/dashboard.html and test search, filters, status changes, and notifications.
+
+No Supabase SQL changes are required for these dashboard-only improvements.
